@@ -1,57 +1,92 @@
 /*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
  */
 package academy.learnprogramming.service;
 
 import academy.learnprogramming.entity.Todo;
+import academy.learnprogramming.entity.User;
+
 import java.util.List;
+import java.util.Map;
+import javax.annotation.PostConstruct;
+import javax.ejb.Stateless;
+import javax.inject.Inject;
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
 import javax.transaction.Transactional;
+import javax.ws.rs.core.Context;
+import javax.ws.rs.core.SecurityContext;
 
 /**
- *
- * @author jose casal
+ * @author Jose Casal
  */
-@Transactional //<-- Transforma la clase en un "servicio"
+
+
+@Stateless
 public class TodoService {
-    
-    @PersistenceContext
-    EntityManager entityManager;
-    
-    /**
-     * Persiste en la base de datos una entidad del tipo @Todo
-     * @param todo <-- Entidad a guardar.
-     * @return Entidad guardada en base de datos.
-     */
-    public Todo createTodo(Todo todo){
-        this.entityManager.persist(todo);
+
+    @Inject
+    private EntityManager entityManager;
+
+    @Inject
+    private QueryService queryService;
+
+    @Inject
+    private SecurityUtil securityUtil;
+
+    @Context
+    private SecurityContext securityContext;
+
+
+
+    public User saveUser(User user) {
+
+        Long count = (Long) queryService.countUserByEmail(user.getEmail()).get(0);
+
+        if (user.getId() == null && count == 0) {
+            Map<String, String> credMap = securityUtil.hashPassword(user.getPassword());
+
+            user.setPassword(credMap.get(SecurityUtil.HASHED_PASSWORD_KEY));
+            user.setSalt(credMap.get(SecurityUtil.SALT_KEY));
+
+            entityManager.persist(user);
+            credMap.clear();
+        }
+
+
+        return user;
+    }
+
+
+    public Todo createTodo(Todo todo) {
+        //Persist into db
+        User userByEmail = queryService.findUserByEmail(securityContext.getUserPrincipal().getName());
+
+        if (userByEmail != null) {
+            todo.setTodoOwner(userByEmail);
+            entityManager.persist(todo);
+
+        }
+        return todo;
+
+
+    }
+
+
+    public Todo updateTodo(Todo todo) {
+        entityManager.merge(todo);
         return todo;
     }
-    /**
-     * Método encargado de actualizar una entidad en base de datos.
-     * @param todo <-- Entidad actualizada
-     * @return La entidad actualizada
-     */
-    public Todo updateTodo(Todo todo){
-        this.entityManager.merge(todo);
-        return todo;
+
+
+    public Todo findToDoById(Long id) {
+        return queryService.findTodoById(id);
     }
-    /**
-     * Método encargado de devolver una entidad de la base de datos en base a su ID.
-     * @param id <-- ID de la entidad a buscar en BD
-     * @return Entidad del ID correspondiente.
-     */
-    public Todo findById(Long id){
-        return this.entityManager.find(Todo.class, id);
+
+
+    public List<Todo> getTodos() {
+        return queryService.getAllTodos();
     }
-    /**
-     * Método encargado de devolver una lista con todas las entidades del tipo @Todo de la BD
-     * @return Lista de entidades.
-     */
-    public List<Todo> getTodos(){
-        return this.entityManager.createQuery("SELECT t from Todo t", Todo.class).getResultList();
-    }
-    
 }
